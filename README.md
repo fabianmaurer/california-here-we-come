@@ -6,3 +6,7 @@ Edit the `stops` and `legs` arrays in `app.js` to change dates, overnight counts
 
 The draft assumes 2027 and identifies Bishop and Angels Camp as provisional hotel towns. The preferred route from Tahoe to Calaveras Big Trees follows CA-4 via Bear Valley, but Ebbetts Pass may be closed in spring. The backup is US 50 over Echo Summit to Placerville, CA-49 south via Jackson and Angels Camp, and CA-4 east through Arnold to the park, returning to Angels Camp afterward. Check road and weather conditions: US 50 can also close or require chains. The Highway 1 coastal route can also be subject to closures. Check tour schedules and weather before booking the Monterey Bay whale-watching trip.
 
+
+## Cache updates
+
+When changing `app.js` or `style.css`, increment the corresponding `?v=` value in `index.html` before publishing. The browser must receive the updated HTML before it can discover the new asset URLs.
