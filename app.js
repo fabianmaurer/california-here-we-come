@@ -25,12 +25,12 @@ const stops = [
  {id:'universal',date:'9. MAI',name:'Universal Studios',type:'visit',icon:'★',coords:[34.1381,-118.3534],detail:'Ein ganzer Tag im Park. Hollywood liegt in der Nähe; weitere Besichtigungen könnten zeitlich knapp werden.'},
  {id:'departure',date:'10. MAI',name:'Abflug LAX',type:'airport',icon:'✈',coords:[33.936,-118.4081],detail:'Mietwagen zurückgeben und ausreichend Zeit bis zum Terminal einplanen.'}
 ];
-// Approximate driving distances, not turn-by-turn directions. Lines are schematic.
-const legs=[['lax','sd','195 km'],['sd','joshua','280 km'],['joshua','vegas','340 km'],['vegas','canyon','450 km','side'],['vegas','death','190 km'],['death','bishop','310 km'],['bishop','mono','105 km'],['mono','tahoe','200 km'],['tahoe','trees','300 km'],['trees','angels','30 km'],['angels','sac','130 km'],['sac','oakland','140 km'],['oakland','sf','20 km','train'],['oakland','santacruz','120 km'],['santacruz','whales','75 km'],['whales','cambria','190 km'],['cambria','morro','50 km'],['morro','santabarbara','200 km'],['santabarbara','la','150 km'],['la','hollywood','15 km','side'],['la','disney','75 km','side'],['la','universal','10 km','side'],['la','departure','50 km']];
+// Approximate one-way travel times, without stops; lines are schematic.
+const legs=[['lax','sd','2,5h'],['sd','joshua','3,5h'],['joshua','vegas','4h'],['vegas','canyon','4,5h','side'],['vegas','death','2,5h'],['death','bishop','4h'],['bishop','mono','1h'],['mono','tahoe','2,5h'],['tahoe','trees','4,5h'],['trees','angels','0,5h'],['angels','sac','1,5h'],['sac','oakland','1,5h'],['oakland','sf','0,5h','train'],['oakland','santacruz','1,5h'],['santacruz','whales','1h'],['whales','cambria','3h'],['cambria','morro','0,5h'],['morro','santabarbara','2,5h'],['santabarbara','la','2h'],['la','hollywood','0,5h','side'],['la','disney','1h','side'],['la','universal','0,5h','side'],['la','departure','1h']];
 const byId=Object.fromEntries(stops.map(s=>[s.id,s]));
 const map=L.map('map',{zoomControl:false,scrollWheelZoom:true}).setView([36.5,-119],6);
 L.control.zoom({position:'topright'}).addTo(map);
-// Keep the overview legible on small screens; show distance labels when zoomed in.
+// Keep the overview legible on small screens; keep labels legible at each zoom level.
 function updateOverview(){document.getElementById('map').classList.toggle('overview',map.getZoom() <= 7);}
 map.on('zoomend',updateOverview); updateOverview();
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
