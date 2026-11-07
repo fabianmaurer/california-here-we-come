@@ -35,10 +35,48 @@ function updateOverview(){document.getElementById('map').classList.toggle('overv
 map.on('zoomend',updateOverview); updateOverview();
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
 const markers={};
-for(const s of stops){const icon=L.divIcon({className:'map-marker',html:`<span class="pin ${s.type}">${s.type==='stay'?`<b>${s.nights}N</b>`:s.icon}</span>`,iconSize:[33,33],iconAnchor:[16,16]});const marker=L.marker(s.coords,{icon,title:s.name}).addTo(map).bindPopup(`<div class="popup-date">${s.date}${s.nights?` · ${s.nights} ${s.nights>1?'NÄCHTE':'NACHT'}`:''}</div><div class="popup-title">${s.name}</div><div class="popup-desc">${s.detail}</div>`);markers[s.id]=marker;}
-for(const [a,b,label,kind] of legs){const points=[byId[a].coords,byId[b].coords];const train=kind==='train';const line=L.polyline(points,{color:train?'#66818d':'#b96649',weight:train?2:2.5,opacity:.8,dashArray:train?'5 7':kind==='side'?'3 6':null}).addTo(map);line.bindTooltip(label,{permanent:true,direction:'center',className:'distance',opacity:.95});}
+const simpleMarkers={};
+// Zusammengelegte Gebiete und grobe geografische Ausdehnung in Metern.
+const circleGroups={lax:'losangeles',departure:'losangeles',la:'losangeles',hollywood:'losangeles',universal:'losangeles',oakland:'bay',sf:'bay'};
+const labelCircles={losangeles:{center:[34.06,-118.36],radius:22000},bay:{center:[37.79,-122.34],radius:16000},canyon:{center:[36.28,-112.31],radius:50000},joshua:{center:[33.90,-115.96],radius:45000},death:{center:[36.50,-116.88],radius:65000},trees:{center:[38.27,-120.30],radius:16000}};
+const circleKey=s=>circleGroups[s.id]||s.id;
+const circleFor=s=>labelCircles[circleKey(s)]||{center:s.coords,radius:16000};
+const groupCircles={};
+const detailedLayer=L.layerGroup().addTo(map);
+const simpleLayer=L.layerGroup();
+for(const s of stops){const icon=L.divIcon({className:'map-marker',html:`<span class="pin ${s.type}">${s.type==='stay'?`<b>${s.nights}N</b>`:s.icon}</span>`,iconSize:[33,33],iconAnchor:[16,16]});const marker=L.marker(s.coords,{icon,title:s.name}).addTo(detailedLayer).bindPopup(`<div class="popup-date">${s.date}${s.nights?` · ${s.nights} ${s.nights>1?'NÄCHTE':'NACHT'}`:''}</div><div class="popup-title">${s.name}</div><div class="popup-desc">${s.detail}</div>`);markers[s.id]=marker;
+ // Feste geografische Kreise um die Orte auf der Hintergrundkarte.
+ const circle=circleFor(s),key=circleKey(s);
+ if(!groupCircles[key]) groupCircles[key]=L.circle(circle.center,{radius:circle.radius,color:'#c34238',weight:2,fill:false}).bindPopup(marker.getPopup().getContent()).addTo(simpleLayer);
+ else groupCircles[key].setPopupContent(groupCircles[key].getPopup().getContent()+'<hr>'+marker.getPopup().getContent());
+ simpleMarkers[s.id]=groupCircles[key];
+}
+for(const [a,b,label,kind] of legs){const points=[byId[a].coords,byId[b].coords];const train=kind==='train';const line=L.polyline(points,{color:train?'#66818d':'#b96649',weight:train?2:2.5,opacity:.8,dashArray:train?'5 7':kind==='side'?'3 6':null}).addTo(detailedLayer);line.bindTooltip(label,{permanent:true,direction:'center',className:'distance',opacity:.95});
+ const from=circleFor(byId[a]),to=circleFor(byId[b]);
+ // Intersect the segment with each circle in map pixel space.
+ const p1=map.project(from.center,10),p2=map.project(to.center,10);
+ const dx=p2.x-p1.x,dy=p2.y-p1.y, length=Math.hypot(dx,dy);
+ const pixelRadius=c=>map.project([c.center[0]+c.radius/111320,c.center[1]],10).distanceTo(map.project(c.center,10));
+ const r1=pixelRadius(from),r2=pixelRadius(to);
+ if(length>r1+r2){
+  const ux=dx/length,uy=dy/length;
+  const startPoint=map.unproject([p1.x+ux*r1,p1.y+uy*r1],10);
+  const endPoint=map.unproject([p2.x-ux*r2,p2.y-uy*r2],10);
+  const simpleLine=L.polyline([startPoint,endPoint],{color:'#c34238',weight:2,opacity:.9,dashArray:kind==='side'?'4 5':null}).addTo(simpleLayer);
+  simpleLine.bindTooltip(label,{permanent:true,direction:'center',className:'distance simple-distance',opacity:1});
+  const angle=Math.atan2(dy,dx)*180/Math.PI;
+  const arrowIcon=rotation=>L.divIcon({className:'arrow-marker',html:`<span style="transform:rotate(${rotation}deg)"></span>`,iconSize:[12,12],iconAnchor:[12,6]});
+  L.marker(endPoint,{interactive:false,icon:arrowIcon(angle)}).addTo(simpleLayer);
+  if(kind==='side'||kind==='train'){
+   L.marker(startPoint,{interactive:false,icon:arrowIcon(angle+180)}).addTo(simpleLayer);
+  }
+ }
+
+} 
+const viewSwitch=document.getElementById('simple-view');
+viewSwitch.addEventListener('change',()=>{if(viewSwitch.checked){map.removeLayer(detailedLayer);simpleLayer.addTo(map);}else{map.removeLayer(simpleLayer);detailedLayer.addTo(map);}document.querySelector('.map-area').classList.toggle('is-simple',viewSwitch.checked); document.querySelector('.app').classList.toggle('simple-mode',viewSwitch.checked); requestAnimationFrame(()=>map.invalidateSize());});
 const list=document.getElementById('itinerary');
-for(const s of stops){const row=document.createElement('div');row.className=`day ${s.type==='stay'?'':'visit-row'}`;row.tabIndex=0;row.setAttribute('role','button');row.setAttribute('aria-label',`${s.name} auf der Karte anzeigen`);row.innerHTML=`<div class="date">${s.date}</div><div class="rail"><i></i></div><div><div class="day-title">${s.name}${s.nights?`<span class="night">${s.nights} ${s.nights>1?'NÄCHTE':'NACHT'}</span>`:''}</div><div class="day-sub">${s.type==='stay'?'ÜBERNACHTUNG':s.type==='airport'?'FLUGHAFEN':'BESICHTIGUNG'} ${s.id==='canyon'?' · OPTIONALER TAGESAUSFLUG':s.id==='ames'?' · OPTIONAL':''}</div></div>`;const open=()=>{map.setView(s.coords,Math.max(map.getZoom(),9));markers[s.id].openPopup();if(innerWidth<=700)document.querySelector('.map-area').scrollIntoView({behavior:'smooth'});};row.addEventListener('click',open);row.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});list.appendChild(row);}
+for(const s of stops){const row=document.createElement('div');row.className=`day ${s.type==='stay'?'':'visit-row'}`;row.tabIndex=0;row.setAttribute('role','button');row.setAttribute('aria-label',`${s.name} auf der Karte anzeigen`);row.innerHTML=`<div class="date">${s.date}</div><div class="rail"><i></i></div><div><div class="day-title">${s.name}${s.nights?`<span class="night">${s.nights} ${s.nights>1?'NÄCHTE':'NACHT'}</span>`:''}</div><div class="day-sub">${s.type==='stay'?'ÜBERNACHTUNG':s.type==='airport'?'FLUGHAFEN':'BESICHTIGUNG'} ${s.id==='canyon'?' · OPTIONALER TAGESAUSFLUG':s.id==='ames'?' · OPTIONAL':''}</div></div>`;const open=()=>{map.setView(s.coords,Math.max(map.getZoom(),9));(viewSwitch.checked?simpleMarkers:markers)[s.id].openPopup();if(innerWidth<=700)document.querySelector('.map-area').scrollIntoView({behavior:'smooth'});};row.addEventListener('click',open);row.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});list.appendChild(row);}
 function fit(){map.fitBounds(L.latLngBounds(stops.map(s=>s.coords)),{padding:[45,45]});}document.getElementById('fit').addEventListener('click',fit);fit();
 
 
