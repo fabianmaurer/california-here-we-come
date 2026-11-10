@@ -19,3 +19,35 @@
 
 /* Die Spitze ist der feste Ankerpunkt am Kreisrand, auch beim Zoomen. */
 .arrow-marker span{display:block;width:12px;height:12px;background:#c34238;clip-path:polygon(0 0,100% 50%,0 100%,25% 50%);transform-origin:100% 50%}
+
+/* Small optional food stops, independent of the itinerary view. */
+.map-controls{position:absolute;top:22px;left:22px;right:58px;z-index:500;display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px;pointer-events:none}
+.map-controls .view-switch{position:static;pointer-events:auto}
+.food-switch{pointer-events:auto;display:flex;align-items:center;gap:7px;min-height:40px;padding:10px 12px;border-radius:4px;background:#f8f6eff2;box-shadow:0 3px 15px #34483e22;font-size:11px;font-weight:700;cursor:pointer}
+.food-switch input{accent-color:#a96521;width:15px;height:15px;margin:0}
+.food-marker{background:transparent;border:0}
+.food-pin{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border:2px solid #80551e;border-radius:8px;background:#fff;box-shadow:0 0 0 2px #fff,0 2px 7px #253d3866;line-height:1}
+.food-pin img{display:block;width:20px;height:20px;object-fit:contain}
+.food-logo{flex:none;display:block;width:28px;height:28px;object-fit:contain;background:#fff;border-radius:5px;padding:2px}
+.food-marker:hover .food-pin{border-color:#253d38;box-shadow:0 0 0 2px #fff,0 2px 9px #253d3880}
+.food-cluster .food-pin{position:relative;border-color:#253d38}
+.food-cluster-count{position:absolute;right:-7px;top:-8px;display:flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 3px;border:2px solid #fff;border-radius:10px;background:#253d38;color:#fff;font:700 9px 'DM Sans',sans-serif;box-shadow:0 1px 4px #253d3855}
+.food-marker:focus-visible .food-pin{outline:3px solid var(--ink);outline-offset:2px}
+.food-tooltip{font:700 11px 'DM Sans',sans-serif;color:#70451d;background:#fffbef;border-color:#e5c996}
+.food-links{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:12px;font-size:11px;font-weight:700}
+.food-links a{color:var(--green)}
+.food-legend{font-style:normal;font-size:13px;line-height:1}
+.food-guide{margin:0 30px 24px;border:1px solid #e2d8bc;border-radius:5px;background:#f6f0df}
+.food-guide summary{padding:12px;cursor:pointer;font-size:12px;font-weight:700}
+.food-count{display:inline-block;margin-left:4px;padding:2px 6px;border-radius:9px;background:#eadcba;font-size:10px}
+.food-guide>p{margin:0;padding:0 12px 12px;font-size:11px;line-height:1.6;color:#6b7669}
+#food-list{border-top:1px solid #e2d8bc}
+.food-stop{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;text-align:left;background:transparent;border:0;border-bottom:1px solid #e6ddc7;color:var(--ink);cursor:pointer}
+.food-stop:last-child{border-bottom:0}
+.food-stop:hover,.food-stop:focus-visible{background:#ede4cd}
+.food-stop:focus-visible{outline:2px solid var(--green);outline-offset:-2px}
+.food-stop>span:first-child{font-size:18px}
+.food-stop>span:nth-child(2){flex:1}
+.food-stop strong{display:block;font-size:11px}
+.food-stop small{display:block;margin-top:3px;color:#75827a;font-size:10px}
+@media(max-width:700px){.map-controls{top:12px;left:12px;right:55px;gap:6px}.food-switch{min-height:36px;padding:8px 10px;font-size:10px}.food-guide{margin:0 22px 20px}.legend{max-width:calc(100% - 24px)}}

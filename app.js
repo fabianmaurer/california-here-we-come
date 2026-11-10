@@ -74,6 +74,73 @@ for(const [a,b,label,kind] of legs){const points=[byId[a].coords,byId[b].coords]
 
 } 
 const viewSwitch=document.getElementById('simple-view');
+// The food layer stays available in both route views and can be hidden independently.
+map.createPane('foodMarkers').style.zIndex=660;
+map.createPane('foodTooltips').style.zIndex=670;
+const foodLayer=L.layerGroup().addTo(map);
+const foodClusters=L.layerGroup().addTo(foodLayer);
+const foodMarkers={};
+const foodList=document.getElementById('food-list');
+const escapeHtml=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+for(const food of foodStops){
+ const directions='https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(food.name+', '+food.address);
+ const logo=food.logo||`assets/chains/${food.id}.png`;
+ const icon=L.divIcon({className:'food-marker',html:`<span class="food-pin" aria-hidden="true"><img src="${logo}" alt="" width="20" height="20"></span>`,iconSize:[28,28],iconAnchor:[14,14]});
+ const marker=L.marker(food.coords,{icon,title:food.name,alt:food.name,pane:'foodMarkers',riseOnHover:true,zIndexOffset:100}).addTo(foodLayer);
+ marker.bindTooltip(escapeHtml(food.name),{direction:'top',offset:[0,-12],className:'food-tooltip',pane:'foodTooltips'});
+ marker.bindPopup(`<div class="popup-date">${escapeHtml(food.area)}</div><div class="popup-title">${escapeHtml(food.name)}</div><div class="popup-desc"><strong>Probieren:</strong> ${escapeHtml(food.try)}<p>${escapeHtml(food.note)}</p><p>${escapeHtml(food.address)}</p></div><div class="food-links"><a href="${directions}" target="_blank" rel="noopener noreferrer">Route öffnen ↗</a><a href="${food.source}" target="_blank" rel="noopener noreferrer">Offizieller Standort ↗</a></div>`,{maxWidth:300});
+ foodMarkers[food.id]=marker;
+ const button=document.createElement('button');
+ button.type='button';
+ button.className='food-stop';
+ button.innerHTML=`<img class="food-logo" src="${logo}" alt="" width="28" height="28" loading="lazy"><span><strong>${escapeHtml(food.name)}</strong><small>${escapeHtml(food.area)}</small></span><span aria-hidden="true">↗</span>`;
+ button.addEventListener('click',()=>{
+  document.getElementById('food-visible').checked=true;
+  foodLayer.addTo(map);
+  map.setView(food.coords,Math.max(map.getZoom(),16),{animate:false});
+  layoutFoodMarkers();
+  marker.openPopup();
+  if(innerWidth<=700)document.querySelector('.map-area').scrollIntoView({behavior:'smooth'});
+ });
+ foodList.appendChild(button);
+}
+// Merge nearby logos in screen space. Recompute after every zoom/resize so
+// groups separate naturally while each branch retains its real coordinates.
+function layoutFoodMarkers(){
+ if(!map.hasLayer(foodLayer))return;
+ foodClusters.clearLayers();
+ const groups=foodStops.map(food=>({foods:[food],point:map.latLngToContainerPoint(food.coords)}));
+ let merged=true;
+ while(merged){
+  merged=false;
+  outer:for(let i=0;i<groups.length;i++)for(let j=i+1;j<groups.length;j++){
+   const a=groups[i],b=groups[j];
+   // Match the 28px icon plus its 2px white outline. A group's badge
+   // extends only above and to the right, so check those edges separately.
+   const bounds=group=>({left:group.point.x-16,right:group.point.x+(group.foods.length>1?19:16),top:group.point.y-(group.foods.length>1?20:16),bottom:group.point.y+16});
+   const aBounds=bounds(a),bBounds=bounds(b);
+   if(aBounds.right<=bBounds.left||bBounds.right<=aBounds.left||aBounds.bottom<=bBounds.top||bBounds.bottom<=aBounds.top)continue;
+   const count=a.foods.length+b.foods.length;
+   a.point=L.point((a.point.x*a.foods.length+b.point.x*b.foods.length)/count,(a.point.y*a.foods.length+b.point.y*b.foods.length)/count);
+   a.foods.push(...b.foods);groups.splice(j,1);merged=true;break outer;
+  }
+ }
+ for(const group of groups){
+  if(group.foods.length===1){foodLayer.addLayer(foodMarkers[group.foods[0].id]);continue;}
+  group.foods.forEach(food=>foodLayer.removeLayer(foodMarkers[food.id]));
+  const first=group.foods[0],logo=first.logo||`assets/chains/${first.id}.png`;
+  const label=`${group.foods.length} Restaurants – zum Vergrößern antippen`;
+  const icon=L.divIcon({className:'food-marker food-cluster',html:`<span class="food-pin" aria-hidden="true"><img src="${logo}" alt="" width="20" height="20"><b class="food-cluster-count">${group.foods.length}</b></span>`,iconSize:[28,28],iconAnchor:[14,14]});
+  const marker=L.marker(map.containerPointToLatLng(group.point),{icon,title:label,alt:label,pane:'foodMarkers',riseOnHover:true,zIndexOffset:100}).addTo(foodClusters);
+  marker.bindTooltip(group.foods.map(food=>escapeHtml(food.name)).join('<br>'),{direction:'top',offset:[0,-16],className:'food-tooltip',pane:'foodTooltips'});
+  marker.on('click',()=>map.fitBounds(L.latLngBounds(group.foods.map(food=>food.coords)),{padding:[60,60],maxZoom:18,animate:false}));
+ }
+}
+map.on('zoomend moveend resize',layoutFoodMarkers);
+document.getElementById('food-count').textContent=foodStops.length;
+document.getElementById('food-visible').addEventListener('change',event=>{
+ if(event.target.checked){foodLayer.addTo(map);layoutFoodMarkers();}else map.removeLayer(foodLayer);
+});
 viewSwitch.addEventListener('change',()=>{if(viewSwitch.checked){map.removeLayer(detailedLayer);simpleLayer.addTo(map);}else{map.removeLayer(simpleLayer);detailedLayer.addTo(map);}document.querySelector('.map-area').classList.toggle('is-simple',viewSwitch.checked); document.querySelector('.app').classList.toggle('simple-mode',viewSwitch.checked); requestAnimationFrame(()=>map.invalidateSize());});
 const list=document.getElementById('itinerary');
 for(const s of stops){const row=document.createElement('div');row.className=`day ${s.type==='stay'?'':'visit-row'}`;row.tabIndex=0;row.setAttribute('role','button');row.setAttribute('aria-label',`${s.name} auf der Karte anzeigen`);row.innerHTML=`<div class="date">${s.date}</div><div class="rail"><i></i></div><div><div class="day-title">${s.name}${s.nights?`<span class="night">${s.nights} ${s.nights>1?'NÄCHTE':'NACHT'}</span>`:''}</div><div class="day-sub">${s.type==='stay'?'ÜBERNACHTUNG':s.type==='airport'?'FLUGHAFEN':'BESICHTIGUNG'} ${s.id==='canyon'?' · OPTIONALER TAGESAUSFLUG':s.id==='ames'?' · OPTIONAL':''}</div></div>`;const open=()=>{map.setView(s.coords,Math.max(map.getZoom(),9));(viewSwitch.checked?simpleMarkers:markers)[s.id].openPopup();if(innerWidth<=700)document.querySelector('.map-area').scrollIntoView({behavior:'smooth'});};row.addEventListener('click',open);row.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});list.appendChild(row);}
