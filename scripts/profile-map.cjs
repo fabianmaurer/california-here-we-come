@@ -50,7 +50,22 @@ const timeout=setTimeout(()=>{console.error('Browser profiling timed out');proce
   document.querySelector('.food-stop').click();check(map.getZoom()>=16&&foodMarkers[foodStops[0].id].isPopupOpen(),'Food list opens individual restaurant popup');map.closePopup();
   map.setZoom(5,{animate:false});const zoom=map.getZoom();foodClusters.getLayers()[0].fire('click');check(map.getZoom()>zoom&&coverage(),'Cluster click zooms and preserves coverage');
   for(const simple of [true,false]){viewSwitch.checked=simple;viewSwitch.dispatchEvent(new Event('change'));await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));check(map.hasLayer(simple?simpleLayer:detailedLayer)&&coverage(),simple?'Simple view works':'Detailed view works');}
-  map.setZoom(5,{animate:false});return passed;
+  const rect=element=>{const r=element.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom};};
+  const overlaps=(a,b)=>a.left<b.right-.1&&a.right>b.left+.1&&a.top<b.bottom-.1&&a.bottom>b.top+.1;
+  for(const simple of [false,true]){
+   viewSwitch.checked=simple;viewSwitch.dispatchEvent(new Event('change'));
+   for(const zoom of [3,5,6,8,12,16]){
+    map.setZoom(zoom,{animate:false});await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    const route=[...map.getContainer().querySelectorAll('.map-marker .pin,.arrow-marker span,.distance')].map(rect);
+    const food=[...map.getContainer().querySelectorAll('.food-pin')].map(element=>{const box=rect(element);box.left-=2;box.right+=2;box.top-=2;box.bottom+=2;const badge=element.querySelector('b');if(badge){const b=rect(badge);box.left=Math.min(box.left,b.left);box.right=Math.max(box.right,b.right);box.top=Math.min(box.top,b.top);box.bottom=Math.max(box.bottom,b.bottom);}return box;});
+    check(food.every((a,i)=>route.every(b=>!overlaps(a,b))&&food.slice(i+1).every(b=>!overlaps(a,b))),'No food overlap at zoom '+zoom+(simple?' (simple)':' (detailed)'));
+    check(foodStops.every(food=>foodMarkers[food.id].getLatLng().equals(L.latLng(food.coords))),'Actual restaurant coordinates retained at zoom '+zoom);
+   }
+  }
+  const origin=L.point(0,0),size={left:1,right:1,top:1,bottom:1};
+  check(nearestFoodPosition(origin,size,[]).equals(origin),'Unobstructed icon stays in place');
+  check(nearestFoodPosition(origin,size,[{left:-5,right:5,top:-5,bottom:5}]).distanceTo(origin)===8,'Overlapping icon moves the minimum distance');
+  viewSwitch.checked=false;viewSwitch.dispatchEvent(new Event('change'));map.setZoom(5,{animate:false});return passed;
  })()`);
  console.log('Browser checks:',JSON.stringify(checks));
  clearTimeout(timeout);ws.close();

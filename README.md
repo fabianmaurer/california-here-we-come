@@ -23,7 +23,7 @@ When changing `app.js`, `food.js`, or `style.css`, increment the corresponding `
 
 ## Mobile performance profiling
 
-Restaurant groups use projected pixel coordinates and update only when zoom changes. Panning and resizing preserve the markers and their DOM. Groups with unchanged membership also survive zoom changes.
+Restaurant groups use projected pixel coordinates and update only when zoom changes. Panning and resizing preserve the markers and their DOM. Groups with unchanged membership also survive zoom changes. Food icons shift to the closest free position around route pins, travel-time labels, arrows, and other food icons, including cluster badges. Only their visual anchors move; restaurant coordinates and directions remain unchanged. Placement refreshes on zoom, route-view changes, and initial font loading.
 
 `scripts/profile-map.cjs` uses the Chromium DevTools Protocol with no npm dependencies (Node 22+). Start the local server on port 8000 and a dedicated headless Edge or Chrome instance on debugging port 9222. For example, in PowerShell:
 
@@ -32,7 +32,7 @@ Start-Process -FilePath 'C:/Program Files (x86)/Microsoft/Edge/Application/msedg
 node scripts/profile-map.cjs
 ```
 
-The profiler emulates a 390 ? 844 mobile viewport at 3? pixel density and 4? CPU throttling. It records DevTools timeline events, browser performance counters, animation frame intervals, cluster execution time, and layer additions/removals during six alternating overview zoom/pan cycles (zoom 5?6). An optional output path saves the summary as JSON. Eight browser assertions then check restaurant coverage, zero cluster work during pan/resize, DOM retention, food visibility after a hidden zoom, restaurant popups, cluster clicks, and both route views.
+The profiler emulates a 390 ? 844 mobile viewport at 3? pixel density and 4? CPU throttling. It records DevTools timeline events, browser performance counters, animation frame intervals, cluster execution time, and layer additions/removals during six alternating overview zoom/pan cycles (zoom 5?6). An optional output path saves the summary as JSON. Browser assertions then check restaurant coverage, zero cluster work during pan/resize, DOM retention, food visibility after a hidden zoom, restaurant popups, cluster clicks, and both route views. Additional checks inspect rendered icon bounds at zoom levels 3, 5, 6, 8, 12, and 16 in both views, verify that restaurant coordinates stay unchanged, and check minimal displacement for a single obstacle.
 
 Measured in headless Edge on November 11, 2026, before and after the optimization:
 

@@ -108,6 +108,7 @@ map.createPane('foodTooltips').style.zIndex=670;
 const foodLayer=L.layerGroup().addTo(map);
 const foodClusters=L.layerGroup().addTo(foodLayer);
 let foodLayoutZoom=null;
+let foodLayoutSimple=null;
 const foodClusterMarkers=new Map();
 const foodMarkers={};
 const foodList=document.getElementById('food-list');
@@ -134,13 +135,47 @@ for(const food of foodStops){
  });
  foodList.appendChild(button);
 }
+// Find the closest free center outside the rectangles occupied by map symbols.
+// A nearest point lies on an obstacle edge (or at the original coordinate).
+function nearestFoodPosition(origin,size,obstacles){
+ const blocked=obstacles.map(b=>({left:b.left-size.right-2,right:b.right+size.left+2,top:b.top-size.bottom-2,bottom:b.bottom+size.top+2}));
+ const free=p=>!blocked.some(b=>p.x>b.left&&p.x<b.right&&p.y>b.top&&p.y<b.bottom);
+ if(free(origin))return origin;
+ const xs=[...new Set([origin.x,...blocked.flatMap(b=>[b.left,b.right])])].sort((a,b)=>Math.abs(a-origin.x)-Math.abs(b-origin.x));
+ const ys=[...new Set([origin.y,...blocked.flatMap(b=>[b.top,b.bottom])])].sort((a,b)=>Math.abs(a-origin.y)-Math.abs(b-origin.y));
+ let best=origin,bestDistance=Infinity;
+ for(const x of xs){
+  const dx2=(x-origin.x)**2;
+  if(dx2>=bestDistance)break;
+  for(const y of ys){
+   const distance=dx2+(y-origin.y)**2;
+   if(distance>=bestDistance)break;
+   const point=L.point(x,y);
+   if(free(point)){best=point;bestDistance=distance;break;}
+  }
+ }
+ return best;
+}
+function foodBounds(point,size){return {left:point.x-size.left,right:point.x+size.right,top:point.y-size.top,bottom:point.y+size.bottom};}
+function offsetFoodIcon(marker,offset){
+ // Change only the visual anchor; the restaurant's actual LatLng stays intact.
+ const icon=marker.options.icon;
+ icon.options.iconAnchor=L.point(14-offset.x,14-offset.y);
+ icon.options.popupAnchor=[offset.x,offset.y];
+ icon.options.tooltipAnchor=[offset.x,offset.y];
+ const element=marker.getElement();
+ if(element){element.style.marginLeft=`${offset.x-14}px`;element.style.marginTop=`${offset.y-14}px`;}
+ if(marker.isPopupOpen())marker.getPopup().update();
+ if(marker.isTooltipOpen())marker.getTooltip().update();
+}
 // Merge nearby logos in projected pixel space. Recompute only when zoom changes;
-// pan and resize cannot change the distance between branches.
+// pan and resize cannot change the distance between branches or route symbols.
 function layoutFoodMarkers(){
- // Panning translates every marker equally, so cluster membership only depends
- // on zoom. Retain the existing DOM, tooltips and focus on pan/resize.
- if(!map.hasLayer(foodLayer)||foodLayoutZoom===map.getZoom())return;
+ // Panning translates every symbol equally. Retain existing DOM, tooltips and
+ // focus on pan/resize; recompute placement only for a new zoom or route view.
+ if(!map.hasLayer(foodLayer)||(foodLayoutZoom===map.getZoom()&&foodLayoutSimple===viewSwitch.checked))return;
  foodLayoutZoom=map.getZoom();
+ foodLayoutSimple=viewSwitch.checked;
  const groups=foodStops.map(food=>({foods:[food],point:map.project(food.coords,foodLayoutZoom)}));
  let merged=true;
  while(merged){
@@ -157,14 +192,31 @@ function layoutFoodMarkers(){
    a.foods.push(...b.foods);groups.splice(j,1);merged=true;break outer;
   }
  }
+ // Read visible symbol bounds once, before writing any marker styles. This
+ // includes scaled itinerary pins, travel-time labels and simple-view arrows.
+ const mapRect=map.getContainer().getBoundingClientRect();
+ const origin=map.project(map.containerPointToLatLng([0,0]),foodLayoutZoom);
+ const obstacles=[...map.getContainer().querySelectorAll('.map-marker .pin,.arrow-marker span,.distance')].map(element=>{
+  const r=element.getBoundingClientRect();
+  return {left:r.left-mapRect.left+origin.x,right:r.right-mapRect.left+origin.x,top:r.top-mapRect.top+origin.y,bottom:r.bottom-mapRect.top+origin.y};
+ });
+ for(const group of groups)group.size={left:16,right:group.foods.length>1?19:16,top:group.foods.length>1?20:16,bottom:16};
+ for(let i=0;i<groups.length;i++){
+  const group=groups[i];
+  // Reserve other food icons too so displacing one cannot create a new overlap.
+  const reserved=groups.slice(i+1).map(g=>foodBounds(g.point,g.size));
+  const position=nearestFoodPosition(group.point,group.size,obstacles.concat(reserved));
+  group.offset=position.subtract(group.point);
+  obstacles.push(foodBounds(position,group.size));
+ }
  const activeClusters=new Set();
  for(const group of groups){
-  if(group.foods.length===1){foodLayer.addLayer(foodMarkers[group.foods[0].id]);continue;}
+  if(group.foods.length===1){const marker=foodMarkers[group.foods[0].id];foodLayer.addLayer(marker);offsetFoodIcon(marker,group.offset);continue;}
   group.foods.forEach(food=>foodLayer.removeLayer(foodMarkers[food.id]));
   const key=group.foods.map(food=>food.id).join(',');
   activeClusters.add(key);
   // Reuse unchanged groups across zoom levels, including their DOM and events.
-  if(foodClusterMarkers.has(key))continue;
+  if(foodClusterMarkers.has(key)){offsetFoodIcon(foodClusterMarkers.get(key),group.offset);continue;}
   const first=group.foods[0],logo=first.logo||`assets/chains/${first.id}.png`;
   const label=`${group.foods.length} Restaurants – zum Vergrößern antippen`;
   const icon=L.divIcon({className:'food-marker food-cluster',html:`<span class="food-pin" aria-hidden="true"><img src="${logo}" alt="" width="20" height="20"><b class="food-cluster-count">${group.foods.length}</b></span>`,iconSize:[28,28],iconAnchor:[14,14]});
@@ -172,6 +224,7 @@ function layoutFoodMarkers(){
   marker.bindTooltip(group.foods.map(food=>escapeHtml(food.name)).join('<br>'),{direction:'top',offset:[0,-16],className:'food-tooltip',pane:'foodTooltips'});
   marker.on('click',()=>map.fitBounds(L.latLngBounds(group.foods.map(food=>food.coords)),{padding:[60,60],maxZoom:18,animate:false}));
   foodClusterMarkers.set(key,marker);
+  offsetFoodIcon(marker,group.offset);
  }
  for(const [key,marker] of foodClusterMarkers){
   if(!activeClusters.has(key)){foodClusters.removeLayer(marker);foodClusterMarkers.delete(key);}
@@ -179,11 +232,13 @@ function layoutFoodMarkers(){
 }
 map.on('zoomend',layoutFoodMarkers);
 layoutFoodMarkers();
+// Route-label bounds may change once the web fonts finish loading.
+document.fonts.ready.then(()=>{foodLayoutZoom=null;layoutFoodMarkers();});
 document.getElementById('food-count').textContent=foodStops.length;
 document.getElementById('food-visible').addEventListener('change',event=>{
  if(event.target.checked){foodLayer.addTo(map);layoutFoodMarkers();}else map.removeLayer(foodLayer);
 });
-viewSwitch.addEventListener('change',()=>{if(viewSwitch.checked){map.removeLayer(detailedLayer);simpleLayer.addTo(map);}else{map.removeLayer(simpleLayer);detailedLayer.addTo(map);}document.querySelector('.map-area').classList.toggle('is-simple',viewSwitch.checked); document.querySelector('.app').classList.toggle('simple-mode',viewSwitch.checked); requestAnimationFrame(()=>map.invalidateSize());});
+viewSwitch.addEventListener('change',()=>{if(viewSwitch.checked){map.removeLayer(detailedLayer);simpleLayer.addTo(map);}else{map.removeLayer(simpleLayer);detailedLayer.addTo(map);}document.querySelector('.map-area').classList.toggle('is-simple',viewSwitch.checked); document.querySelector('.app').classList.toggle('simple-mode',viewSwitch.checked); layoutFoodMarkers(); requestAnimationFrame(()=>map.invalidateSize());});
 const list=document.getElementById('itinerary');
 for(const s of stops){const row=document.createElement('div');row.className=`day ${s.type==='stay'?'':'visit-row'}`;row.tabIndex=0;row.setAttribute('role','button');row.setAttribute('aria-label',`${s.name} auf der Karte anzeigen`);row.innerHTML=`<div class="date">${s.date}</div><div class="rail"><i></i></div><div><div class="day-title">${s.name}${s.nights?`<span class="night">${s.nights} ${s.nights>1?'NÄCHTE':'NACHT'}</span>`:''}</div><div class="day-sub">${s.type==='stay'?'ÜBERNACHTUNG':s.type==='airport'?'FLUGHAFEN':'BESICHTIGUNG'} ${s.id==='canyon'?' · OPTIONALER TAGESAUSFLUG':s.id==='ames'?' · OPTIONAL':''}</div></div>`;const open=()=>{map.setView(s.coords,Math.max(map.getZoom(),9));(viewSwitch.checked?simpleMarkers:markers)[s.id].openPopup();if(innerWidth<=700)document.querySelector('.map-area').scrollIntoView({behavior:'smooth'});};row.addEventListener('click',open);row.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});list.appendChild(row);}
 function fit(){map.fitBounds(L.latLngBounds(stops.map(s=>s.coords)),{padding:[45,45]});}document.getElementById('fit').addEventListener('click',fit);fit();
