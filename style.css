@@ -51,3 +51,11 @@
 .food-stop strong{display:block;font-size:11px}
 .food-stop small{display:block;margin-top:3px;color:#75827a;font-size:10px}
 @media(max-width:700px){.map-controls{top:12px;left:12px;right:55px;gap:6px}.food-switch{min-height:36px;padding:8px 10px;font-size:10px}.food-guide{margin:0 22px 20px}.legend{max-width:calc(100% - 24px)}}
+
+/* Keep the expand button in Leaflet's top-right control stack, above zoom. */
+.map-fullscreen-control{border:0!important;box-shadow:0 3px 15px #34483e22}
+.map-fullscreen-control button{display:flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border:0;border-radius:4px;background:var(--paper);color:var(--ink);cursor:pointer}
+.map-fullscreen-control button:hover{background:#edece0}
+.map-fullscreen-control button:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+.app.map-expanded .sidebar{display:none}
+@media(max-width:700px){.map-fullscreen-control button{width:44px;height:44px}.app.map-expanded .map-area{height:100dvh;flex:1}}

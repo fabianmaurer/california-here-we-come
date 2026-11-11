@@ -29,6 +29,34 @@ const stops = [
 const legs=[['lax','sd','2,5h'],['sd','joshua','3,5h'],['joshua','vegas','4h'],['vegas','canyon','4,5h','side'],['vegas','death','2,5h'],['death','bishop','4h'],['bishop','mono','1h'],['mono','tahoe','2,5h'],['tahoe','trees','4,5h'],['trees','angels','0,5h'],['angels','sac','1,5h'],['sac','oakland','1,5h'],['oakland','sf','0,5h','train'],['oakland','santacruz','1,5h'],['santacruz','whales','1h'],['whales','cambria','3h'],['cambria','morro','0,5h'],['morro','santabarbara','2,5h'],['santabarbara','la','2h'],['la','hollywood','0,5h','side'],['la','disney','1h','side'],['la','universal','0,5h','side'],['la','departure','1h']];
 const byId=Object.fromEntries(stops.map(s=>[s.id,s]));
 const map=L.map('map',{zoomControl:false,scrollWheelZoom:true}).setView([36.5,-119],6);
+// Expand the map within the page so this also works on mobile browsers.
+const FullscreenControl=L.Control.extend({
+ options:{position:'topright'},
+ onAdd(){
+  const container=L.DomUtil.create('div','leaflet-bar map-fullscreen-control');
+  const button=L.DomUtil.create('button','',container);
+  button.type='button';
+  button.setAttribute('aria-controls','map itinerary');
+  button.innerHTML='<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const update=expanded=>{
+   document.querySelector('.app').classList.toggle('map-expanded',expanded);
+   button.setAttribute('aria-pressed',String(expanded));
+   button.title=expanded?'Vollbild beenden':'Karte im Vollbild anzeigen';
+   button.setAttribute('aria-label',button.title);
+   button.querySelector('path').setAttribute('d',expanded?'M3 9h6V3M15 3v6h6M21 15h-6v6M9 21v-6H3':'M9 3H3v6M15 3h6v6M21 15v6h-6M9 21H3v-6');
+   requestAnimationFrame(()=>map.invalidateSize({animate:false}));
+  };
+  L.DomEvent.disableClickPropagation(container);
+  L.DomEvent.disableScrollPropagation(container);
+  button.addEventListener('click',()=>update(button.getAttribute('aria-pressed')!=='true'));
+  document.addEventListener('keydown',event=>{
+   if(event.key==='Escape'&&button.getAttribute('aria-pressed')==='true'){update(false);button.focus();}
+  });
+  update(false);
+  return container;
+ }
+});
+new FullscreenControl().addTo(map);
 L.control.zoom({position:'topright'}).addTo(map);
 // Keep the overview legible on small screens; keep labels legible at each zoom level.
 function updateOverview(){document.getElementById('map').classList.toggle('overview',map.getZoom() <= 7);}
