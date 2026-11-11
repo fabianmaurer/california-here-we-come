@@ -79,6 +79,8 @@ map.createPane('foodMarkers').style.zIndex=660;
 map.createPane('foodTooltips').style.zIndex=670;
 const foodLayer=L.layerGroup().addTo(map);
 const foodClusters=L.layerGroup().addTo(foodLayer);
+let foodLayoutZoom=null;
+const foodClusterMarkers=new Map();
 const foodMarkers={};
 const foodList=document.getElementById('food-list');
 const escapeHtml=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -86,7 +88,7 @@ for(const food of foodStops){
  const directions='https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(food.name+', '+food.address);
  const logo=food.logo||`assets/chains/${food.id}.png`;
  const icon=L.divIcon({className:'food-marker',html:`<span class="food-pin" aria-hidden="true"><img src="${logo}" alt="" width="20" height="20"></span>`,iconSize:[28,28],iconAnchor:[14,14]});
- const marker=L.marker(food.coords,{icon,title:food.name,alt:food.name,pane:'foodMarkers',riseOnHover:true,zIndexOffset:100}).addTo(foodLayer);
+ const marker=L.marker(food.coords,{icon,title:food.name,alt:food.name,pane:'foodMarkers',riseOnHover:true,zIndexOffset:100});
  marker.bindTooltip(escapeHtml(food.name),{direction:'top',offset:[0,-12],className:'food-tooltip',pane:'foodTooltips'});
  marker.bindPopup(`<div class="popup-date">${escapeHtml(food.area)}</div><div class="popup-title">${escapeHtml(food.name)}</div><div class="popup-desc"><strong>Probieren:</strong> ${escapeHtml(food.try)}<p>${escapeHtml(food.note)}</p><p>${escapeHtml(food.address)}</p></div><div class="food-links"><a href="${directions}" target="_blank" rel="noopener noreferrer">Route öffnen ↗</a><a href="${food.source}" target="_blank" rel="noopener noreferrer">Offizieller Standort ↗</a></div>`,{maxWidth:300});
  foodMarkers[food.id]=marker;
@@ -104,12 +106,14 @@ for(const food of foodStops){
  });
  foodList.appendChild(button);
 }
-// Merge nearby logos in screen space. Recompute after every zoom/resize so
-// groups separate naturally while each branch retains its real coordinates.
+// Merge nearby logos in projected pixel space. Recompute only when zoom changes;
+// pan and resize cannot change the distance between branches.
 function layoutFoodMarkers(){
- if(!map.hasLayer(foodLayer))return;
- foodClusters.clearLayers();
- const groups=foodStops.map(food=>({foods:[food],point:map.latLngToContainerPoint(food.coords)}));
+ // Panning translates every marker equally, so cluster membership only depends
+ // on zoom. Retain the existing DOM, tooltips and focus on pan/resize.
+ if(!map.hasLayer(foodLayer)||foodLayoutZoom===map.getZoom())return;
+ foodLayoutZoom=map.getZoom();
+ const groups=foodStops.map(food=>({foods:[food],point:map.project(food.coords,foodLayoutZoom)}));
  let merged=true;
  while(merged){
   merged=false;
@@ -125,18 +129,28 @@ function layoutFoodMarkers(){
    a.foods.push(...b.foods);groups.splice(j,1);merged=true;break outer;
   }
  }
+ const activeClusters=new Set();
  for(const group of groups){
   if(group.foods.length===1){foodLayer.addLayer(foodMarkers[group.foods[0].id]);continue;}
   group.foods.forEach(food=>foodLayer.removeLayer(foodMarkers[food.id]));
+  const key=group.foods.map(food=>food.id).join(',');
+  activeClusters.add(key);
+  // Reuse unchanged groups across zoom levels, including their DOM and events.
+  if(foodClusterMarkers.has(key))continue;
   const first=group.foods[0],logo=first.logo||`assets/chains/${first.id}.png`;
   const label=`${group.foods.length} Restaurants – zum Vergrößern antippen`;
   const icon=L.divIcon({className:'food-marker food-cluster',html:`<span class="food-pin" aria-hidden="true"><img src="${logo}" alt="" width="20" height="20"><b class="food-cluster-count">${group.foods.length}</b></span>`,iconSize:[28,28],iconAnchor:[14,14]});
-  const marker=L.marker(map.containerPointToLatLng(group.point),{icon,title:label,alt:label,pane:'foodMarkers',riseOnHover:true,zIndexOffset:100}).addTo(foodClusters);
+  const marker=L.marker(map.unproject(group.point,foodLayoutZoom),{icon,title:label,alt:label,pane:'foodMarkers',riseOnHover:true,zIndexOffset:100}).addTo(foodClusters);
   marker.bindTooltip(group.foods.map(food=>escapeHtml(food.name)).join('<br>'),{direction:'top',offset:[0,-16],className:'food-tooltip',pane:'foodTooltips'});
   marker.on('click',()=>map.fitBounds(L.latLngBounds(group.foods.map(food=>food.coords)),{padding:[60,60],maxZoom:18,animate:false}));
+  foodClusterMarkers.set(key,marker);
+ }
+ for(const [key,marker] of foodClusterMarkers){
+  if(!activeClusters.has(key)){foodClusters.removeLayer(marker);foodClusterMarkers.delete(key);}
  }
 }
-map.on('zoomend moveend resize',layoutFoodMarkers);
+map.on('zoomend',layoutFoodMarkers);
+layoutFoodMarkers();
 document.getElementById('food-count').textContent=foodStops.length;
 document.getElementById('food-visible').addEventListener('change',event=>{
  if(event.target.checked){foodLayer.addTo(map);layoutFoodMarkers();}else map.removeLayer(foodLayer);
